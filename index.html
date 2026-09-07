@@ -549,6 +549,7 @@ const LOCAL_HASH   = "a6307bad216a7d3087f82531388773f7c6a1e24573862ce065e688e81d
 const LOCAL_MASTER = "e1787cd289fe32a11e5ac77f0a5289eea7d6c4b84054dd356bf107ead84c703b";
 
 const REFRESH_SEC = 300;
+const SITE_URL = "https://peac3-writeoff.vercel.app/";
 const LS_DATA = "peac3-2569-local", LS_THEME = "peac3-2569-theme", SS_PW = "peac3-2569-pw";
 const COL = { biz: "ประเภทธุรกิจ", office: "กฟจ.", status: "สถานะดำเนินการ", value: "มูลค่า" };
 const FALLBACK_IDX = { biz: 2, office: 3, status: 19 };
@@ -566,6 +567,8 @@ const nf = new Intl.NumberFormat("th-TH");
 const nfC = new Intl.NumberFormat("th-TH", { notation: "compact", maximumFractionDigits: 1 });
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const thaiDate = d => d.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" });
+const thaiDateTime = d => d.toLocaleDateString("th-TH", { day: "numeric", month: "long", year: "numeric" }) +
+  " เวลา " + d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" }) + " น.";
 const shortStamp = d => d.toLocaleString("th-TH", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 const clockStr = d => d.toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit" });
 const isoDay = d => { const t = new Date(d); t.setMinutes(t.getMinutes() - t.getTimezoneOffset()); return t.toISOString().slice(0, 10); };
@@ -1126,14 +1129,27 @@ function lineOf(o, i) {
   if (tail.length) s += " — " + tail.join(" · ");
   return s;
 }
-function blockText(list, title, agg) {
-  const body = list.map((o, i) => lineOf(o, i)).join("\n");
+function blockText(list, title, agg, kind) {
+  const body = list.length ? list.map((o, i) => lineOf(o, i)).join("\n") : "— ไม่มีรายการ —";
   if (!sumOpt("optHead")) return body;
-  const head = `ติดตามการตัดจำหน่ายรื้อถอน ปี 2569 · กฟก.3
-ข้อมูล ณ ${thaiDate(state.asof)} · ความคืบหน้ารวม ${pctOf(agg).toFixed(1)}%
+  const icon = sumOpt("optEmoji") ? (kind === "warn" ? "🔴 " : "✅ ") : "";
+  const head =
+`📊 ติดตามการตัดจำหน่ายรื้อถอน ปี 2569
+การไฟฟ้าส่วนภูมิภาค เขต 3 (ภาคกลาง) จังหวัดนครปฐม
 
-${title} (${list.length} แห่ง)`;
-  return head + "\n" + body;
+🗓 ข้อมูล ณ ${thaiDate(state.asof)}
+⏱ อัปโหลดข้อมูลล่าสุด ${thaiDateTime(state.at)}
+📈 ความคืบหน้าภาพรวมทั้งเขต ${pctOf(agg).toFixed(1)}%
+
+${icon}${title} จำนวน ${list.length} แห่ง`;
+  const foot = kind === "warn"
+    ? `\n\nขอความร่วมมือหน่วยงานตามรายชื่อข้างต้น เร่งรัดดำเนินการและปรับปรุงข้อมูลให้เป็นปัจจุบัน
+🔗 ตรวจสอบรายละเอียดรายสำนักงานได้ที่
+${SITE_URL}`
+    : `\n\nขอขอบคุณหน่วยงานที่ดำเนินการครบถ้วนแล้ว
+🔗 ตรวจสอบรายละเอียดรายสำนักงานได้ที่
+${SITE_URL}`;
+  return head + "\n" + body + foot;
 }
 
 function renderSum() {
@@ -1151,19 +1167,19 @@ function renderSum() {
     return a;
   }, { total: 0, done: 0, exempt: 0, pending: 0, other: 0, vTotal: 0, vDone: 0, vExempt: 0, vPending: 0, vOther: 0 });
 
+  const byBiz = (a, b) => a.biz.localeCompare(b.biz, "th") || a.office.localeCompare(b.office, "th");
   const flat = groups.flatMap(g => g.offices);
-  const pend = flat.filter(o => pctOf(o) < 100).sort((a, b) => pctOf(a) - pctOf(b) || a.office.localeCompare(b.office, "th"));
-  const done = flat.filter(o => pctOf(o) >= 100).sort((a, b) => a.biz.localeCompare(b.biz, "th") || a.office.localeCompare(b.office, "th"));
+  const pend = flat.filter(o => pctOf(o) < 100).sort(byBiz);
+  const done = flat.filter(o => pctOf(o) >= 100).sort(byBiz);
 
   const col = (list, title, kind) => {
     const sec = el("section", "card sumcol");
-    const text = blockText(list, title, agg);
+    const text = blockText(list, title, agg, kind);
     sec.innerHTML = `
       <div class="sumhead">
         <h3>${title}<span class="cnt ${kind === "warn" ? "warn" : "ok"}">${list.length} แห่ง</span></h3>
         ${admin ? `<div class="sumbtns">
-          <button class="ctl" type="button" data-act="copy">คัดลอก</button>
-          <button class="ctl primary" type="button" data-act="line">ส่งเข้า LINE</button>
+          <button class="ctl primary" type="button" data-act="copy">คัดลอกข้อความ</button>
         </div>` : ""}
       </div>
       ${admin ? `<textarea class="sumbox" spellcheck="false">${esc(text)}</textarea>` : ""}
@@ -1179,11 +1195,6 @@ function renderSum() {
     if (admin) {
       const box = sec.querySelector(".sumbox");
       sec.querySelector('[data-act="copy"]').addEventListener("click", () => copyText(box.value, "คัดลอกข้อความแล้ว พร้อมวางในไลน์"));
-      sec.querySelector('[data-act="line"]').addEventListener("click", () => {
-        const t = box.value;
-        if (t.length > 900) toast("ข้อความยาวมาก ไลน์อาจตัดบางส่วน ลองปิดตัวเลือกบางอย่าง", true);
-        window.open("https://line.me/R/msg/text/?" + encodeURIComponent(t), "_blank", "noopener");
-      });
       sec.querySelectorAll(".sumrow").forEach(r => r.addEventListener("click", () => {
         const o = list[+r.dataset.i];
         copyText(lineOf(o, +r.dataset.i), "คัดลอก " + o.office + " แล้ว");
