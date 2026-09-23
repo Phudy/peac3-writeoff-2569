@@ -520,7 +520,7 @@ footer{padding:0 0 46px;color:var(--faint);font-size:12px}
 
 <dialog id="dlgExport">
   <div class="dhead"><div><h2>ดาวน์โหลดข้อมูลเป็น Excel</h2>
-    <p>เลือกเฉพาะ กฟจ./กฟส. ที่ต้องการ ไฟล์จะมีชีตสรุปและชีตข้อมูลรายรายการครบทุกคอลัมน์</p></div></div>
+    <p>เลือกเฉพาะ กฟจ./กฟส. ที่ต้องการ ค่าเริ่มต้นจะได้เฉพาะรายการที่ยังไม่ดำเนินการ พร้อมชีตสรุปภาพรวม</p></div></div>
   <div class="dbody">
     <div style="display:flex;gap:9px;margin-bottom:14px;flex-wrap:wrap">
       <button class="ctl" type="button" data-pick="all">เลือกทั้งหมด</button>
@@ -531,6 +531,7 @@ footer{padding:0 0 46px;color:var(--faint);font-size:12px}
   </div>
   <div class="dfoot">
     <span class="spacer" id="pickCount">ยังไม่ได้เลือก</span>
+    <label class="check" style="border:0;background:none"><input type="checkbox" id="optPending" checked> เฉพาะที่ยังไม่ดำเนินการ</label>
     <label class="check" style="border:0;background:none"><input type="checkbox" id="optSplit"> แยกชีตตามสำนักงาน</label>
     <button class="ctl" type="button" id="btnCancelExport">ยกเลิก</button>
     <button class="ctl primary" type="button" id="btnDoExport">ดาวน์โหลด</button>
@@ -729,8 +730,11 @@ const hasValue = () => state.idx.value !== null && state.idx.value !== undefined
 function summarize() {
   const { rows, idx } = state, map = new Map();
   rows.forEach(r => {
-    const biz = String(r[idx.biz] ?? "").trim() || "ไม่ระบุประเภทธุรกิจ";
-    const off = String(r[idx.office] ?? "").trim() || "ไม่ระบุสำนักงาน";
+    const rawBiz = String(r[idx.biz] ?? "").trim();
+    const rawOff = String(r[idx.office] ?? "").trim();
+    if (!rawBiz && !rawOff) return;           /* แถวว่าง/ท้ายตาราง ไม่นับเป็นสำนักงาน */
+    const biz = rawBiz || "ไม่ระบุประเภทธุรกิจ";
+    const off = rawOff || "ไม่ระบุสำนักงาน";
     const st = norm(r[idx.status]);
     const val = hasValue() ? numOf(r[idx.value]) : 0;
     if (!map.has(biz)) map.set(biz, new Map());
@@ -995,7 +999,7 @@ function openOffice(name) {
     fillOfficeTable(o);
   }));
   fillOfficeTable(o);
-  $("#ofMeta").textContent = `ข้อมูล ณ ${thaiDate(state.asof)} · ${nf.format(o.total)} รายการ`;
+  $("#ofMeta").textContent = `ข้อมูล ณ ${thaiDate(state.asof)} · ${nf.format(o.total)} รายการ · ไฟล์ Excel จะได้เฉพาะที่ยังไม่ดำเนินการ`;
   $("#dlgOffice").showModal();
   $("#dlgOffice").querySelector(".dbody").scrollTop = 0;
 }
@@ -1024,10 +1028,15 @@ function printOffice() {
 }
 
 /* ---------- ดาวน์โหลด ---------- */
-function writeBook(offices, split) {
+function writeBook(offices, split, statusOnly) {
   const set = new Set(offices), idx = state.idx;
-  const rows = state.rows.filter(r => !set.size || set.has(String(r[idx.office] ?? "").trim()));
-  if (!rows.length) { alert("ไม่มีข้อมูลตามที่เลือก"); return; }
+  const keepStatus = r => {
+    if (!statusOnly) return true;
+    const st = norm(r[idx.status]);
+    return statusOnly === S.PENDING ? (st === S.PENDING || st === S.OTHER) : st === statusOnly;
+  };
+  const rows = state.rows.filter(r => (!set.size || set.has(String(r[idx.office] ?? "").trim())) && keepStatus(r));
+  if (!rows.length) { alert(statusOnly ? "ไม่มีรายการที่ " + statusOnly + " ตามที่เลือก" : "ไม่มีข้อมูลตามที่เลือก"); return; }
   const headers = state.headers.map((h, i) => h || "คอลัมน์ " + (i + 1));
   const head = ["ประเภทธุรกิจ", "กฟจ./กฟส.", "รายการทั้งหมด", "ดำเนินการแล้ว", "ยกเว้น", "ยังไม่ดำเนินการ", "ไม่ระบุ", "% ดำเนินการ"];
   if (hasValue()) head.push("มูลค่ารวม", "มูลค่าที่ดำเนินการแล้ว", "% ตามมูลค่า");
@@ -1039,7 +1048,8 @@ function writeBook(offices, split) {
     if (hasValue()) row.push(o.vTotal, o.vDone + o.vExempt, o.vTotal ? Math.round((o.vDone + o.vExempt) / o.vTotal * 1000) / 10 : 0);
     summary.push(row);
   }));
-  const name = `ตัดจำหน่ายรื้อถอน2569_${set.size === 1 ? [...set][0].replace(/[\\/:*?"<>|]/g, "") : set.size ? set.size + "สำนักงาน" : "ทั้งเขต"}_${isoDay(state.asof)}`;
+  const tagName = statusOnly === S.PENDING ? "_ยังไม่ดำเนินการ" : statusOnly ? "_" + statusOnly : "";
+  const name = `ตัดจำหน่ายรื้อถอน2569_${set.size === 1 ? [...set][0].replace(/[\\/:*?"<>|]/g, "") : set.size ? set.size + "สำนักงาน" : "ทั้งเขต"}${tagName}_${isoDay(state.asof)}`;
 
   if (typeof XLSX === "undefined") {
     const csv = [headers, ...rows].map(r => r.map(v => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\r\n");
@@ -1066,7 +1076,7 @@ function writeBook(offices, split) {
     const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
     ws["!cols"] = headers.map(() => ({ wch: 18 }));
     ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: rows.length, c: Math.max(headers.length - 1, 0) } }) };
-    XLSX.utils.book_append_sheet(wb, ws, "ข้อมูล");
+    XLSX.utils.book_append_sheet(wb, ws, statusOnly === S.PENDING ? "ยังไม่ดำเนินการ" : "ข้อมูล");
   }
   XLSX.writeFile(wb, name + ".xlsx");
   toast("สร้างไฟล์ Excel แล้ว");
@@ -1292,14 +1302,17 @@ $("#mCount").addEventListener("click", () => { measure = "count"; lastKpi = {}; 
 $("#mValue").addEventListener("click", () => { measure = "value"; lastKpi = {}; renderShell(); renderDash(); });
 $("#btnOfClose").addEventListener("click", () => $("#dlgOffice").close());
 $("#btnOfPrint").addEventListener("click", printOffice);
-$("#btnOfExcel").addEventListener("click", () => writeBook([currentOffice], false));
+$("#btnOfExcel").addEventListener("click", () => writeBook([currentOffice], false, statusFilter || S.PENDING));
 $("#q").addEventListener("input", renderDash);
 $("#fBiz").addEventListener("change", renderDash);
 $("#sortBy").addEventListener("change", renderDash);
 $("#btnRefresh").addEventListener("click", () => loadData(true));
 $("#btnExport").addEventListener("click", openExport);
 $("#btnCancelExport").addEventListener("click", () => $("#dlgExport").close());
-$("#btnDoExport").addEventListener("click", () => { writeBook(picks(), $("#optSplit").checked); $("#dlgExport").close(); });
+$("#btnDoExport").addEventListener("click", () => {
+  writeBook(picks(), $("#optSplit").checked, $("#optPending").checked ? S.PENDING : null);
+  $("#dlgExport").close();
+});
 
 document.addEventListener("keydown", e => {
   if (e.key === "/" && !/input|select|textarea/i.test(document.activeElement.tagName)) { e.preventDefault(); $("#q").focus(); }
