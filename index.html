@@ -13,20 +13,20 @@
   --bg:#0A0D14; --hero:#0E1320; --panel:#131824; --panel-2:#1A2130; --panel-3:#212A3B;
   --line:#242D3E; --hair:#1C2434;
   --text:#E9EDF5; --muted:#8D97AC; --faint:#5E687D;
-  --done:#2DD4A7; --exempt:#8B8CF7; --pending:#F5B23D; --other:#4A5468;
-  --done-soft:rgba(45,212,167,.14); --exempt-soft:rgba(139,140,247,.14); --pending-soft:rgba(245,178,61,.14);
+  --done:#2DD4A7; --exempt:#8B8CF7; --pending:#F2585E; --other:#4A5468;
+  --done-soft:rgba(45,212,167,.14); --exempt-soft:rgba(139,140,247,.14); --pending-soft:rgba(242,88,94,.14);
   --track:#1E2636; --shadow:0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px #000;
-  --glow1:rgba(45,212,167,.20); --glow2:rgba(139,140,247,.20); --glow3:rgba(245,178,61,.10);
+  --glow1:rgba(45,212,167,.20); --glow2:rgba(139,140,247,.20); --glow3:rgba(242,88,94,.10);
   --bad:#F87171;
 }
 :root[data-theme="light"]{
   --bg:#F5F7FB; --hero:#FFFFFF; --panel:#FFFFFF; --panel-2:#F3F5FA; --panel-3:#E9EDF5;
   --line:#E3E8F1; --hair:#EDF0F6;
   --text:#101625; --muted:#5C6579; --faint:#8B93A6;
-  --done:#0FA97F; --exempt:#5B5DE0; --pending:#D68A0C; --other:#B3BAC8;
-  --done-soft:rgba(15,169,127,.12); --exempt-soft:rgba(91,93,224,.12); --pending-soft:rgba(214,138,12,.13);
+  --done:#0FA97F; --exempt:#5B5DE0; --pending:#D0383E; --other:#B3BAC8;
+  --done-soft:rgba(15,169,127,.12); --exempt-soft:rgba(91,93,224,.12); --pending-soft:rgba(208,56,62,.11);
   --track:#E8ECF4; --shadow:0 1px 2px rgba(16,22,37,.05), 0 14px 34px -26px rgba(16,22,37,.5);
-  --glow1:rgba(15,169,127,.14); --glow2:rgba(91,93,224,.12); --glow3:rgba(214,138,12,.08);
+  --glow1:rgba(15,169,127,.14); --glow2:rgba(91,93,224,.12); --glow3:rgba(208,56,62,.07);
   --bad:#C23B3B;
 }
 *{box-sizing:border-box}
@@ -139,12 +139,21 @@ main{padding:20px 0 70px}
 .cell:last-child{border-bottom:0}
 .cell.full{background:var(--done-soft);box-shadow:inset 3px 0 0 var(--done)}
 .cell.full .nm{color:var(--done);font-weight:600}
+.cell.late{background:var(--pending-soft);box-shadow:inset 3px 0 0 var(--pending)}
+.cell.late .nm{color:var(--pending);font-weight:600}
+.cell.late .pct{color:var(--pending)}
 .okbadge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--done);
   background:var(--done-soft);border:1px solid color-mix(in srgb,var(--done) 35%,transparent);
+  border-radius:999px;padding:1px 9px;white-space:nowrap;flex:none}
+.latebadge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:var(--pending);
+  background:var(--pending-soft);border:1px solid color-mix(in srgb,var(--pending) 35%,transparent);
   border-radius:999px;padding:1px 9px;white-space:nowrap;flex:none}
 .group.full{border-color:color-mix(in srgb,var(--done) 45%,var(--line))}
 .ghead.full{background:var(--done-soft)}
 .ghead.full .gstat b{color:var(--done)}
+.group.late{border-color:color-mix(in srgb,var(--pending) 40%,var(--line))}
+.ghead.late{background:var(--pending-soft)}
+.ghead.late .gstat b{color:var(--pending)}
 .cell .top{display:flex;align-items:baseline;gap:10px}
 .cell .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
 .cell .rank{font-family:"Space Grotesk",monospace;font-size:12px;color:var(--faint);width:22px;flex:none}
@@ -891,7 +900,7 @@ function renderDash() {
 
   const cell = (o, rank, hideName) => {
     const p = pctOf(o), mm = M(o), tt = mm.total || 1, full = p >= 100;
-    const c = el("div", "cell" + (full ? " full" : ""));
+    const c = el("div", "cell" + (full ? " full" : " late"));
     const segs = full
       ? `<i class="b-done" data-w="100"></i>`
       : `<i class="b-done" data-w="${mm.done / tt * 100}"></i>
@@ -901,7 +910,7 @@ function renderDash() {
     c.innerHTML = `<div class="top">
         ${rank ? `<span class="rank">${rank}</span>` : ""}
         ${hideName ? `<span class="nm"></span>` : `<span class="nm" title="${esc(o.office)}">${esc(o.office)}</span>`}
-        ${full ? `<span class="okbadge">✓ ครบแล้ว</span>` : ""}
+        ${full ? `<span class="okbadge">✓ ครบแล้ว</span>` : `<span class="latebadge">● ยังไม่ครบ</span>`}
         ${view === "board" ? `<span class="code">${esc(o.biz)}</span>` : ""}
         <span class="cnt num">${fmtM(mm.done + mm.exempt)} / ${fmtM(mm.total)}</span>
         <span class="pct num">${p.toFixed(1)}%</span>
@@ -934,12 +943,12 @@ function renderDash() {
       shown += offices.length;
       const sec = el("section", "group");
       const gp = pctOf(g.sum), gfull = gp >= 100;
-      if (gfull) sec.classList.add("full");
-      const head = el("div", "ghead" + (gfull ? " full" : ""));
+      sec.classList.add(gfull ? "full" : "late");
+      const head = el("div", "ghead" + (gfull ? " full" : " late"));
       const names = offices.map(o => o.office);
       const label = names.length <= 2 ? names.join(" · ") : `${names[0]} และอีก ${names.length - 1}`;
       const gm = M(g.sum);
-      head.innerHTML = `<h2 class="gname"><span class="code">${esc(g.biz)}</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(label)}</span>${gfull ? `<span class="okbadge">✓ ครบแล้ว</span>` : ""}</h2>
+      head.innerHTML = `<h2 class="gname"><span class="code">${esc(g.biz)}</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(label)}</span>${gfull ? `<span class="okbadge">✓ ครบแล้ว</span>` : `<span class="latebadge">● ยังไม่ครบ</span>`}</h2>
         <div class="gstat">เสร็จ <b class="num">${fmtM(gm.done + gm.exempt)}</b> / <b class="num">${fmtM(gm.total)}</b> · <b class="num">${gp.toFixed(1)}%</b></div>`;
       sec.appendChild(head);
       offices.forEach(o => sec.appendChild(cell(o, null, offices.length === 1)));
